@@ -1,0 +1,40 @@
+# .elasticbeanstalk/ebdeploy.yml — deployment configuration
+# Place this file in the .elasticbeanstalk/ directory at the repository root.
+# Generate it interactively with: ebdeploy init
+
+# ── Elastic Beanstalk ────────────────────────────────────────────────────────
+app_name: d-sights-danone               # <project>-<client>
+environment: d-sights-danone-stage      # <project>-<client>-<env>
+
+# ── S3 ───────────────────────────────────────────────────────────────────────
+s3_bucket: elasticbeanstalk-us-east-1-089747246458
+s3_prefix: d-sights/stage/danone        # <project>/<env>/<client> → s3://<bucket>/<project>/<env>/<client>/<version>.zip
+
+# ── AWS ──────────────────────────────────────────────────────────────────────
+aws_region: us-east-1
+aws_profile: my-aws-profile             # profile from ~/.aws/credentials (remove to use default)
+mfa_serial: arn:aws:iam::089747246458:mfa/username   # MFA device ARN (remove if not using MFA)
+
+# ── Archive ──────────────────────────────────────────────────────────────────
+archive_path: deploy.zip
+use_git_archive: true                   # false → includes uncommitted changes
+
+# Exclusions when use_git_archive: false
+zip_exclude:
+  - "*.git*"
+  - "__pycache__/*"
+  - "*.pyc"
+  - ".env"
+  - ".env.*"
+  - "*.egg-info/*"
+  - "dist/*"
+  - "build/*"
+  - ".venv/*"
+  - "venv/*"
+  - "node_modules/*"
+  - "*.log"
+
+# ── Wait behaviour ───────────────────────────────────────────────────────────
+wait_for_ready: true     # wait until EB environment becomes Ready
+wait_timeout: 600        # seconds (10 min)
+poll_interval: 15        # seconds between checks

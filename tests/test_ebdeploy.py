@@ -552,3 +552,49 @@ class TestCLIInit:
         assert "s3_bucket: new-bucket" in content
         assert "app_name: myproj-myclient" in content
         assert "aws_region: eu-west-1" in content
+
+    def test_init_without_client(self, tmp_path):
+        # Empty client → app_name=project, environment=project-env
+        inputs = ["myproj", "", "stage", "my-bucket", "us-east-1", "", ""]
+        result = self._run_init(["init"], inputs, tmp_path)
+        assert result == 0
+        content = (tmp_path / "ebdeploy.yml").read_text(encoding="utf-8")
+        assert "app_name: myproj\n" in content
+        assert "environment: myproj-stage\n" in content
+        assert "s3_prefix: myproj/stage\n" in content
+
+    def test_reconfigure_keeps_no_client_config(self, tmp_path):
+        yml = tmp_path / "ebdeploy.yml"
+        yml.write_text(
+            "app_name: myproj\n"
+            "environment: myproj-stage\n"
+            "s3_bucket: my-bucket\n"
+            "s3_prefix: myproj/stage\n"
+            "aws_region: us-east-1\n",
+            encoding="utf-8",
+        )
+        inputs = ["", "", "", "", "", "", ""]
+        result = self._run_init(["init", "--reconfigure"], inputs, tmp_path)
+        assert result == 0
+        content = yml.read_text(encoding="utf-8")
+        assert "app_name: myproj\n" in content
+        assert "environment: myproj-stage\n" in content
+        assert "s3_prefix: myproj/stage\n" in content
+
+    def test_reconfigure_adds_client_to_clientless_config(self, tmp_path):
+        yml = tmp_path / "ebdeploy.yml"
+        yml.write_text(
+            "app_name: myproj\n"
+            "environment: myproj-stage\n"
+            "s3_bucket: my-bucket\n"
+            "s3_prefix: myproj/stage\n"
+            "aws_region: us-east-1\n",
+            encoding="utf-8",
+        )
+        inputs = ["", "acme", "", "", "", "", ""]
+        result = self._run_init(["init", "--reconfigure"], inputs, tmp_path)
+        assert result == 0
+        content = yml.read_text(encoding="utf-8")
+        assert "app_name: myproj-acme\n" in content
+        assert "environment: myproj-acme-stage\n" in content
+        assert "s3_prefix: myproj/stage/acme\n" in content

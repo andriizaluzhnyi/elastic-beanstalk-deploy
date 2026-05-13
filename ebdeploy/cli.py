@@ -81,24 +81,31 @@ def cmd_init(args: argparse.Namespace) -> int:
         hint = f' [{default}]' if default else ''
         return input(f"{label}{hint}: ").strip() or default
 
-    # Infer project/client/env from s3_prefix (format: project/env/client)
+    # Infer project/client/env from s3_prefix (formats: project/env/client or project/env)
     default_project = default_env = default_client = ''
     if existing and existing.s3_prefix:
         parts = existing.s3_prefix.split('/')
         if len(parts) == 3:
             default_project, default_env, default_client = parts[0], parts[1], parts[2]
+        elif len(parts) == 2:
+            default_project, default_env = parts[0], parts[1]
 
-    project    = _prompt("Project name (project)", default_project)
-    client     = _prompt("Client name  (client)", default_client)
-    env        = _prompt("Environment  (env)", default_env)
+    project    = _prompt("Project name", default_project)
+    client     = _prompt("Client name  (leave blank to skip)", default_client)
+    env        = _prompt("Environment", default_env)
     bucket     = _prompt("S3 bucket", existing.s3_bucket if existing else '')
     region     = _prompt("AWS region", (existing.aws_region if existing else '') or 'us-east-1') or 'us-east-1'
     profile    = _prompt("AWS profile  (leave blank to skip)", (existing.aws_profile or '') if existing else '')
     mfa_serial = _prompt("MFA serial ARN (leave blank to skip)", (existing.mfa_serial or '') if existing else '')
 
-    app_name    = f"{project}-{client}"
-    environment = f"{project}-{client}-{env}"
-    s3_prefix   = f"{project}/{env}/{client}"
+    if client:
+        app_name    = f"{project}-{client}"
+        environment = f"{project}-{client}-{env}"
+        s3_prefix   = f"{project}/{env}/{client}"
+    else:
+        app_name    = project
+        environment = f"{project}-{env}"
+        s3_prefix   = f"{project}/{env}"
 
     lines = [
         "# ebdeploy.yml — deployment configuration",

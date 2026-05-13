@@ -63,17 +63,38 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"  To reconfigure, run: ebdeploy init --reconfigure")
         return 1
 
+    existing = None
+    if config_path.exists():
+        try:
+            existing = DeployConfig.from_file(config_path)
+        except Exception:
+            pass
+
     config_path.parent.mkdir(parents=True, exist_ok=True)
     action = "Overwriting" if config_path.exists() else "Creating"
     print(f"{action} {config_path}\n")
 
-    project = input("Project name (project): ").strip()
-    client  = input("Client name  (client):  ").strip()
-    env     = input("Environment  (env):     ").strip()
-    bucket  = input("S3 bucket:              ").strip()
-    region     = input("AWS region   [us-east-1]: ").strip() or "us-east-1"
-    profile    = input("AWS profile  (leave blank to skip): ").strip()
-    mfa_serial = input("MFA serial ARN (leave blank to skip): ").strip()
+    if existing:
+        print("Press Enter to keep the current value shown in [brackets].\n")
+
+    def _prompt(label: str, default: str = '') -> str:
+        hint = f' [{default}]' if default else ''
+        return input(f"{label}{hint}: ").strip() or default
+
+    # Infer project/client/env from s3_prefix (format: project/env/client)
+    default_project = default_env = default_client = ''
+    if existing and existing.s3_prefix:
+        parts = existing.s3_prefix.split('/')
+        if len(parts) == 3:
+            default_project, default_env, default_client = parts[0], parts[1], parts[2]
+
+    project    = _prompt("Project name (project)", default_project)
+    client     = _prompt("Client name  (client)", default_client)
+    env        = _prompt("Environment  (env)", default_env)
+    bucket     = _prompt("S3 bucket", existing.s3_bucket if existing else '')
+    region     = _prompt("AWS region", (existing.aws_region if existing else '') or 'us-east-1') or 'us-east-1'
+    profile    = _prompt("AWS profile  (leave blank to skip)", (existing.aws_profile or '') if existing else '')
+    mfa_serial = _prompt("MFA serial ARN (leave blank to skip)", (existing.mfa_serial or '') if existing else '')
 
     app_name    = f"{project}-{client}"
     environment = f"{project}-{client}-{env}"

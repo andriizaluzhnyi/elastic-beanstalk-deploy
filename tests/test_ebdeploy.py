@@ -402,3 +402,73 @@ class TestCLITempCreds:
         save_call = mock_mgr.save_credentials.call_args
         target_profile = save_call[0][1] if save_call[0] else save_call[1].get("target_profile")
         assert target_profile == "myprofile-temp"
+
+
+# ─────────────────────────── CLI — init --reconfigure ───────────────────────
+
+class TestCLIInit:
+    def _run_init(self, argv, inputs, tmp_path):
+        from ebdeploy.cli import main
+        with patch("builtins.input", side_effect=inputs):
+            return main(["-c", str(tmp_path / "ebdeploy.yml")] + argv)
+
+    def test_init_creates_config(self, tmp_path):
+        inputs = ["myproj", "myclient", "stage", "my-bucket", "eu-west-1", "", ""]
+        result = self._run_init(["init"], inputs, tmp_path)
+        assert result == 0
+        yml = tmp_path / "ebdeploy.yml"
+        assert yml.exists()
+        content = yml.read_text(encoding="utf-8")
+        assert "app_name: myproj-myclient" in content
+        assert "environment: myproj-myclient-stage" in content
+        assert "s3_prefix: myproj/stage/myclient" in content
+        assert "s3_bucket: my-bucket" in content
+        assert "aws_region: eu-west-1" in content
+
+    def test_init_fails_if_exists_without_reconfigure(self, tmp_path):
+        yml = tmp_path / "ebdeploy.yml"
+        yml.write_text("app_name: old\n", encoding="utf-8")
+        result = self._run_init(["init"], [], tmp_path)
+        assert result == 1
+
+    def test_reconfigure_keeps_previous_values_on_empty_input(self, tmp_path):
+        yml = tmp_path / "ebdeploy.yml"
+        yml.write_text(
+            "app_name: myproj-myclient\n"
+            "environment: myproj-myclient-stage\n"
+            "s3_bucket: old-bucket\n"
+            "s3_prefix: myproj/stage/myclient\n"
+            "aws_region: eu-west-1\n"
+            "aws_profile: myprofile\n"
+            "mfa_serial: arn:aws:iam::123:mfa/user\n",
+            encoding="utf-8",
+        )
+        # Press Enter on all prompts → keep existing values
+        inputs = ["", "", "", "", "", "", ""]
+        result = self._run_init(["init", "--reconfigure"], inputs, tmp_path)
+        assert result == 0
+        content = yml.read_text(encoding="utf-8")
+        assert "app_name: myproj-myclient" in content
+        assert "s3_bucket: old-bucket" in content
+        assert "aws_region: eu-west-1" in content
+        assert "aws_profile: myprofile" in content
+        assert "mfa_serial: arn:aws:iam::123:mfa/user" in content
+
+    def test_reconfigure_overrides_specific_field(self, tmp_path):
+        yml = tmp_path / "ebdeploy.yml"
+        yml.write_text(
+            "app_name: myproj-myclient\n"
+            "environment: myproj-myclient-stage\n"
+            "s3_bucket: old-bucket\n"
+            "s3_prefix: myproj/stage/myclient\n"
+            "aws_region: eu-west-1\n",
+            encoding="utf-8",
+        )
+        # Only change bucket; keep everything else
+        inputs = ["", "", "", "new-bucket", "", "", ""]
+        result = self._run_init(["init", "--reconfigure"], inputs, tmp_path)
+        assert result == 0
+        content = yml.read_text(encoding="utf-8")
+        assert "s3_bucket: new-bucket" in content
+        assert "app_name: myproj-myclient" in content
+        assert "aws_region: eu-west-1" in content

@@ -85,6 +85,8 @@ class Deployer:
                 source_dir=self.repo_dir,
                 use_git_archive=self.config.use_git_archive,
                 exclude_patterns=self.config.zip_exclude,
+                client_name=self._client_name(),
+                clients_dir=self.config.clients_dir,
             )
 
             s3_key = f"{self.config.s3_prefix}/{version_label}.zip".lstrip("/")
@@ -138,6 +140,8 @@ class Deployer:
             source_dir=self.repo_dir,
             use_git_archive=self.config.use_git_archive,
             exclude_patterns=self.config.zip_exclude,
+            client_name=self._client_name(),
+            clients_dir=self.config.clients_dir,
         )
 
     # ------------------------------------------------------------------ private
@@ -156,6 +160,11 @@ class Deployer:
             return get_branch(self.repo_dir)
         except Exception:
             return "unknown"
+
+    def _client_name(self) -> Optional[str]:
+        """Extract client name from s3_prefix (format: project/env/client)."""
+        parts = self.config.s3_prefix.split('/')
+        return parts[2] if len(parts) >= 3 else None
 
     def _auto_description(self, branch: str) -> str:
         """Deploy 2024-04-17 14:30:00 | Branch: main | Commit: a1b2c3d"""

@@ -7,6 +7,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from typing import Optional
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .exceptions import ArchiveError
@@ -20,6 +21,8 @@ def build_archive(
     source_dir: str | Path = ".",
     use_git_archive: bool = True,
     exclude_patterns: list[str] | None = None,
+    client_name: Optional[str] = None,
+    clients_dir: str = "clients",
 ) -> Path:
     """
     Create a zip archive of the application.
@@ -31,6 +34,9 @@ def build_archive(
                          Falls back to manual zip if there are uncommitted changes.
         exclude_patterns: Glob patterns to exclude (from ebdeploy.yml).
                           Automatically extended with patterns from .ebignore.
+        client_name: When set, subdirs of ``clients_dir`` that do not match
+                     this name (case-insensitive) are excluded from the archive.
+        clients_dir: Name of the directory that holds per-client subdirs.
 
     Returns:
         Path to the created archive.
@@ -39,7 +45,8 @@ def build_archive(
     source_dir = Path(source_dir).resolve()
 
     ebignore = _read_ebignore(source_dir)
-    all_exclude = list(exclude_patterns or []) + ebignore
+    other_clients = _other_clients_patterns(source_dir, clients_dir, client_name)
+    all_exclude = list(exclude_patterns or []) + ebignore + other_clients
 
     try:
         if use_git_archive:
@@ -51,8 +58,9 @@ def build_archive(
             else:
                 logger.info("Building archive via git archive ...")
                 git_archive(output_path, source_dir)
-                if ebignore:
-                    _filter_zip(output_path, ebignore)
+                post_filter = ebignore + other_clients
+                if post_filter:
+                    _filter_zip(output_path, post_filter)
         else:
             logger.info("Building zip archive (including uncommitted changes) ...")
             _zip_directory(output_path, source_dir, all_exclude)
@@ -91,8 +99,40 @@ def _zip_directory(
                 zf.write(abs_path, rel_path)
 
 
+def _other_clients_patterns(
+    source_dir: Path,
+    clients_dir: str,
+    client_name: Optional[str],
+) -> list[str]:
+    """Return exclusion patterns for client subdirs that don't match client_name.
+
+    Comparison is case-insensitive. Returns an empty list when client_name is
+    None or the clients directory does not exist.
+    """
+    if not client_name:
+        return []
+    clients_path = source_dir / clients_dir
+    if not clients_path.is_dir():
+        return []
+    patterns: list[str] = []
+    for entry in sorted(clients_path.iterdir()):
+        if entry.is_dir() and entry.name.lower() != client_name.lower():
+            base = f"{clients_dir}/{entry.name}"
+            patterns += [base, f"{base}/*"]
+    if patterns:
+        logger.info(
+            f"Excluding {len(patterns) // 2} other client dir(s) from {clients_dir}/"
+        )
+    return patterns
+
+
 def _is_excluded(rel_path: str, patterns: list[str]) -> bool:
-    """Return True if the path matches any of the glob patterns."""
+    """Return True if the path matches any of the glob patterns.
+
+    Path separators are normalised to forward slashes before matching so that
+    patterns written with '/' work correctly on Windows as well.
+    """
+    rel_path = rel_path.replace(os.sep, "/")
     for pat in patterns:
         if fnmatch.fnmatch(rel_path, pat) or fnmatch.fnmatch(
             os.path.basename(rel_path), pat

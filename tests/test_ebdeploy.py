@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from ebdeploy.archiver import _is_excluded, build_archive
+from ebdeploy.archiver import _is_excluded, _other_clients_patterns, build_archive
 from ebdeploy.config import DeployConfig
 from ebdeploy.deployer import Deployer
 from ebdeploy.exceptions import ConfigError, STSError
@@ -91,13 +91,66 @@ class TestIsExcluded:
     def test_no_match(self):
         assert not _is_excluded("app/main.py", ["*.pyc"])
 
+    def test_backslash_path_normalized(self):
+        assert _is_excluded("clients\\Nestle\\app.py", ["clients/Nestle/*"])
+
+    def test_glob_nested_match(self):
+        assert _is_excluded("clients/Nestle/sub/deep/file.py", ["clients/Nestle/*"])
+
+
+class TestOtherClientsPatterns:
+    def test_returns_empty_when_no_clients_dir(self, tmp_path):
+        assert _other_clients_patterns(tmp_path, "clients", "danone") == []
+
+    def test_returns_empty_when_client_name_none(self, tmp_path):
+        (tmp_path / "clients").mkdir()
+        assert _other_clients_patterns(tmp_path, "clients", None) == []
+
+    def test_excludes_other_clients_case_insensitive(self, tmp_path):
+        clients = tmp_path / "clients"
+        clients.mkdir()
+        (clients / "Danone").mkdir()
+        (clients / "Nestle").mkdir()
+        (clients / "Unilever").mkdir()
+
+        patterns = _other_clients_patterns(tmp_path, "clients", "danone")
+        pattern_dirs = {p.split("/")[1] for p in patterns if p.count("/") == 1}
+        assert "Nestle" in pattern_dirs
+        assert "Unilever" in pattern_dirs
+        assert "Danone" not in pattern_dirs
+
+    def test_keeps_matching_client_mixed_case(self, tmp_path):
+        clients = tmp_path / "clients"
+        clients.mkdir()
+        (clients / "DANONE").mkdir()
+        (clients / "nestle").mkdir()
+
+        patterns = _other_clients_patterns(tmp_path, "clients", "Danone")
+        excluded = {p.split("/")[1] for p in patterns if p.count("/") == 1}
+        assert "nestle" in excluded
+        assert "DANONE" not in excluded
+
+    def test_custom_clients_dir_name(self, tmp_path):
+        cdir = tmp_path / "tenants"
+        cdir.mkdir()
+        (cdir / "acme").mkdir()
+        (cdir / "globex").mkdir()
+
+        patterns = _other_clients_patterns(tmp_path, "tenants", "acme")
+        assert any("globex" in p for p in patterns)
+        assert not any("acme" in p for p in patterns)
+
 
 class TestBuildArchive:
-    def test_zip_directory(self, tmp_path):
+    def _make_src(self, tmp_path):
         src = tmp_path / "src"
         src.mkdir()
         (src / "app.py").write_text("print('hello')")
         (src / "ignored.pyc").write_text("")
+        return src
+
+    def test_zip_directory(self, tmp_path):
+        src = self._make_src(tmp_path)
         out = tmp_path / "out.zip"
 
         with patch("ebdeploy.archiver.has_uncommitted_changes", return_value=True):
@@ -113,6 +166,33 @@ class TestBuildArchive:
             names = zf.namelist()
         assert "app.py" in names
         assert "ignored.pyc" not in names
+
+    def test_excludes_other_clients_in_zip(self, tmp_path):
+        src = self._make_src(tmp_path)
+        clients = src / "clients"
+        clients.mkdir()
+        (clients / "Danone").mkdir()
+        (clients / "Danone" / "config.py").write_text("# danone")
+        (clients / "Nestle").mkdir()
+        (clients / "Nestle" / "config.py").write_text("# nestle")
+        (clients / "Nestle" / "sub").mkdir()
+        (clients / "Nestle" / "sub" / "deep.py").write_text("# deep")
+        out = tmp_path / "out.zip"
+
+        with patch("ebdeploy.archiver.has_uncommitted_changes", return_value=True):
+            build_archive(
+                output_path=out,
+                source_dir=src,
+                use_git_archive=False,
+                exclude_patterns=[],
+                client_name="danone",
+            )
+
+        with zipfile.ZipFile(out) as zf:
+            names = {n.replace("\\", "/") for n in zf.namelist()}
+        assert "clients/Danone/config.py" in names
+        assert "clients/Nestle/config.py" not in names
+        assert "clients/Nestle/sub/deep.py" not in names
 
 
 # ─────────────────────────── Deployer ───────────────────────────────────────

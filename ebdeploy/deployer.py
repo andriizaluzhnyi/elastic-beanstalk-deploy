@@ -162,7 +162,13 @@ class Deployer:
             return "unknown"
 
     def _client_name(self) -> Optional[str]:
-        """Extract client name from s3_prefix (format: project/env/client)."""
+        """Extract client name from s3_prefix (format: project/env/client).
+
+        Returns None when skip_client_filter is enabled, causing all client
+        directories to be included in the archive.
+        """
+        if self.config.skip_client_filter:
+            return None
         parts = self.config.s3_prefix.split('/')
         return parts[2] if len(parts) >= 3 else None
 

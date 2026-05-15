@@ -115,12 +115,18 @@ def _other_clients_patterns(
     if not clients_path.is_dir():
         return []
     patterns: list[str] = []
+    matched_dir: Optional[str] = None
     for entry in sorted(clients_path.iterdir()):
-        if entry.is_dir() and entry.name.lower() != client_name.lower():
-            base = f"{clients_dir}/{entry.name}"
-            patterns += [base, f"{base}/*"]
+        if entry.is_dir():
+            if entry.name.lower() == client_name.lower():
+                matched_dir = entry.name
+            else:
+                base = f"{clients_dir}/{entry.name}"
+                patterns += [base, f"{base}/*"]
+    if matched_dir:
+        logger.info(f"Client applied: {clients_dir}/{matched_dir}")
     if patterns:
-        logger.info(
+        logger.debug(
             f"Excluding {len(patterns) // 2} other client dir(s) from {clients_dir}/"
         )
     return patterns

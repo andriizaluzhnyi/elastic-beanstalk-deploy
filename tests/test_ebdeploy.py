@@ -140,6 +140,42 @@ class TestOtherClientsPatterns:
         assert any("globex" in p for p in patterns)
         assert not any("acme" in p for p in patterns)
 
+    def test_logs_applied_client(self, tmp_path, caplog):
+        clients = tmp_path / "clients"
+        clients.mkdir()
+        (clients / "Danone").mkdir()
+        (clients / "Nestle").mkdir()
+
+        import logging
+        with caplog.at_level(logging.INFO, logger="ebdeploy.archiver"):
+            _other_clients_patterns(tmp_path, "clients", "danone")
+
+        assert any("Client applied: clients/Danone" in r.message for r in caplog.records)
+
+    def test_excluding_logged_at_debug(self, tmp_path, caplog):
+        clients = tmp_path / "clients"
+        clients.mkdir()
+        (clients / "Danone").mkdir()
+        (clients / "Nestle").mkdir()
+
+        import logging
+        with caplog.at_level(logging.DEBUG, logger="ebdeploy.archiver"):
+            _other_clients_patterns(tmp_path, "clients", "danone")
+
+        debug_msgs = [r.message for r in caplog.records if r.levelno == logging.DEBUG]
+        assert any("Excluding" in m for m in debug_msgs)
+
+    def test_no_client_applied_log_when_no_match(self, tmp_path, caplog):
+        clients = tmp_path / "clients"
+        clients.mkdir()
+        (clients / "Nestle").mkdir()
+
+        import logging
+        with caplog.at_level(logging.INFO, logger="ebdeploy.archiver"):
+            _other_clients_patterns(tmp_path, "clients", "danone")
+
+        assert not any("Client applied" in r.message for r in caplog.records)
+
 
 class TestBuildArchive:
     def _make_src(self, tmp_path):
@@ -194,6 +230,30 @@ class TestBuildArchive:
         assert "clients/Nestle/config.py" not in names
         assert "clients/Nestle/sub/deep.py" not in names
 
+    def test_skip_client_filter_includes_all_clients(self, tmp_path):
+        src = self._make_src(tmp_path)
+        clients = src / "clients"
+        clients.mkdir()
+        (clients / "Danone").mkdir()
+        (clients / "Danone" / "config.py").write_text("# danone")
+        (clients / "Nestle").mkdir()
+        (clients / "Nestle" / "config.py").write_text("# nestle")
+        out = tmp_path / "out.zip"
+
+        with patch("ebdeploy.archiver.has_uncommitted_changes", return_value=True):
+            build_archive(
+                output_path=out,
+                source_dir=src,
+                use_git_archive=False,
+                exclude_patterns=[],
+                client_name=None,
+            )
+
+        with zipfile.ZipFile(out) as zf:
+            names = {n.replace("\\", "/") for n in zf.namelist()}
+        assert "clients/Danone/config.py" in names
+        assert "clients/Nestle/config.py" in names
+
 
 # ─────────────────────────── Deployer ───────────────────────────────────────
 
@@ -239,6 +299,52 @@ class TestDeployer:
         mock_aws.upload_to_s3.assert_called_once()
         mock_aws.create_application_version.assert_called_once()
         mock_aws.deploy_to_environment.assert_called_once()
+
+    def test_skip_client_filter_passes_none_client_name(self, tmp_path):
+        cfg = DeployConfig(
+            app_name="myapp-danone",
+            environment="myapp-danone-stage",
+            s3_bucket="my-bucket",
+            s3_prefix="myapp/stage/danone",
+            aws_region="us-east-1",
+            wait_for_ready=False,
+            skip_client_filter=True,
+        )
+        deployer = Deployer(cfg, repo_dir=tmp_path)
+
+        with (
+            patch("ebdeploy.deployer.build_archive") as mock_archive,
+            patch("ebdeploy.deployer.get_short_sha", return_value="abc1234"),
+            patch("ebdeploy.deployer.get_branch", return_value="main"),
+        ):
+            mock_archive.return_value = tmp_path / "deploy.zip"
+            deployer.deploy(dry_run=True)
+
+        _, kwargs = mock_archive.call_args
+        assert kwargs["client_name"] is None
+
+    def test_client_name_extracted_when_filter_enabled(self, tmp_path):
+        cfg = DeployConfig(
+            app_name="myapp-danone",
+            environment="myapp-danone-stage",
+            s3_bucket="my-bucket",
+            s3_prefix="myapp/stage/danone",
+            aws_region="us-east-1",
+            wait_for_ready=False,
+            skip_client_filter=False,
+        )
+        deployer = Deployer(cfg, repo_dir=tmp_path)
+
+        with (
+            patch("ebdeploy.deployer.build_archive") as mock_archive,
+            patch("ebdeploy.deployer.get_short_sha", return_value="abc1234"),
+            patch("ebdeploy.deployer.get_branch", return_value="main"),
+        ):
+            mock_archive.return_value = tmp_path / "deploy.zip"
+            deployer.deploy(dry_run=True)
+
+        _, kwargs = mock_archive.call_args
+        assert kwargs["client_name"] == "danone"
 
 
 # ─────────────────────── TemporaryCredentialsManager ────────────────────────

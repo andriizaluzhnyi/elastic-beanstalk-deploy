@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -m pytest tests/test_ebdeploy.py -v -k \"TestOtherClientsPatterns\")",
+      "Bash(python -m pytest tests/test_ebdeploy.py -v -k \"TestOtherClientsPatterns\")",
+      "Bash(python -m pytest tests/ -v)"
+    ]
+  }
+}

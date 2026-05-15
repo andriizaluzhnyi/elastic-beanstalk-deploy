@@ -48,6 +48,8 @@ def _make_deployer(args: argparse.Namespace) -> Deployer:
     for key, val in overrides.items():
         if val:
             setattr(cfg, key, val)
+    if getattr(args, "no_client_filter", False):
+        cfg.skip_client_filter = True
 
     return Deployer(cfg)
 
@@ -241,6 +243,8 @@ def main(argv: list[str] | None = None) -> int:
     p_deploy.add_argument("--version", help="Version label (default: git SHA)")
     p_deploy.add_argument("--description", default="", help="Version description")
     p_deploy.add_argument("--dry-run", action="store_true", help="Build archive without deploying")
+    p_deploy.add_argument("--no-client-filter", dest="no_client_filter", action="store_true",
+                          help="Include all client dirs in the archive (skip client filtering)")
     p_deploy.set_defaults(func=cmd_deploy)
 
     # status
@@ -250,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
     # package
     p_package = sub.add_parser("package", parents=[aws], help="Build archive only")
     p_package.add_argument("--output", default="deploy.zip", help="Output archive path")
+    p_package.add_argument("--no-client-filter", dest="no_client_filter", action="store_true",
+                           help="Include all client dirs in the archive (skip client filtering)")
     p_package.set_defaults(func=cmd_package)
 
     # temp

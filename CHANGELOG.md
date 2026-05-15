@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-15
+
+### Added
+
+- `skip_client_filter: bool` config field (default: `false`) — when `true`, all client subdirectories are included in the archive regardless of the client name in `s3_prefix`.
+- `--no-client-filter` flag for `ebdeploy deploy` and `ebdeploy package` commands to skip client filtering at runtime without changing the config file.
+
+### Changed
+
+- "Excluding N other client dir(s)" log is now emitted at DEBUG level instead of INFO to reduce noise.
+- Added INFO log `Client applied: clients/<name>` to confirm which client directory was included in the archive.
+
 ## [0.1.1] - 2026-05-13
 
 ### Added
@@ -37,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Global CLI flags: `-c / --config` to specify a custom config path, `-v / --verbose` for debug output.
 - Per-command AWS overrides: `--profile`, `--region`, `--app-name`, `--environment`, `--s3-bucket`.
 
-[Unreleased]: https://github.com/your-org/ebdeploy/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/your-org/ebdeploy/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/your-org/ebdeploy/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/your-org/ebdeploy/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/your-org/ebdeploy/releases/tag/v0.1.0

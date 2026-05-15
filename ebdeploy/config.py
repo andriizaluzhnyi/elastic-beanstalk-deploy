@@ -37,6 +37,7 @@ class DeployConfig:
     archive_path: str = "deploy.zip"
     use_git_archive: bool = True   # False → zip including uncommitted changes
     clients_dir: str = "clients"   # directory that holds per-client subdirs
+    skip_client_filter: bool = False  # when True, all client dirs are included
 
     # Exclusions when use_git_archive=False
     zip_exclude: list[str] = field(default_factory=lambda: [
